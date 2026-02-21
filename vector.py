@@ -2,8 +2,11 @@ from __future__ import annotations
 import math
 
 class Vector2d:
-    def __init__(self,x:float|tuple=0,y:float=None):
-        if isinstance(x,tuple):
+    def __init__(self,x:float|tuple|Vector2d=0,y:float=None):
+        if isinstance(x,Vector2d):
+            x, y = x.x, x.y
+
+        elif isinstance(x,tuple):
             x, y, *other = x
             if other:
                 raise ValueError("Too many arguments")
@@ -85,7 +88,16 @@ class Vector2d:
     
     def normalize(self):
         magnitude = self.magnitude()
-        return Vector2d(self.x/magnitude, self.y/magnitude)
+        if magnitude > 0:
+            nx = self.x/magnitude
+        else:
+            nx = 0
+        if magnitude > 0:
+            ny = self.y/magnitude
+        else:
+            ny = 0
+    
+        return Vector2d(nx, ny)
 
     def clone(self):
         return Vector2d(self.x,self.y)
