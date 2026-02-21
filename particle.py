@@ -8,7 +8,7 @@ class Particle:
     def __repr__(self):
         return f"({self.pos} {self.vel})"
 
-    gravity = Vector2d(0,1)
-    radius = 5
+    gravity = Vector2d(0,0.1)
+    radius = 3
     velConserve = 1
-    elasticity = 0.95
+    elasticity = 0.99

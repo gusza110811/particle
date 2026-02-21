@@ -32,10 +32,10 @@ class Simulation:
 
         self.buffer = []
 
-        for idx in range(300):
+        for idx in range(500):
             for idk in range(1,5):
                 part = Particle.Particle((370,-200+idk*Particle.Particle.radius*1.5))
-                part.vel.x -= 10
+                part.vel.x -= 1
                 self.buffer.append(part)
 
         while self.running:
@@ -84,17 +84,16 @@ class Simulation:
         pygame.display.update()
     
     def physic(self):
-
-        self.boundCheck()
-        self.doPhysicMethod()
-
         particles = self.particles
-
-        for i in range(16):
-            self.overlapCheck(particles)
-    def buildGrid(self, particles):
-        grid = {}
         cs = self.cell_size
+        self.doGravity()
+
+        for _ in range(8):
+            self.boundCheck()
+            self.overlapCheck(particles,cs)
+            self.doPhysicMethod()
+    def buildGrid(self, particles, cs):
+        grid = {}
 
         for p in particles:
             cx = int(p.pos.x // cs)
@@ -114,16 +113,18 @@ class Simulation:
         for id in range(len(particles)):
             applyPhysic(particles[id])
     
-    def overlapCheck(self, particles):
+    def doGravity(self):
+        particles = self.particles
+        gravity = self.gravity
+        for id in range(len(particles)):
+            gravity(particles[id])
+    
+    def gravity(self,part):
+        part.vel.translate(part.gravity)
+    
+    def overlapCheck(self, particles, cs):
         applyOverlap = self.applyOverlap
-        grid:dict[tuple[int,int],list[Particle.Particle]] = self.buildGrid(particles)
-        neighbor_offsets = [
-            (0, 0),
-            (1, 0),
-            (0, 1),
-            (1, 1),
-            (-1, -1),
-        ]
+        grid:dict[tuple[int,int],list[Particle.Particle]] = self.buildGrid(particles,cs)
 
         for (cx, cy), cell_particles in grid.items():
 
@@ -142,23 +143,24 @@ class Simulation:
 
                     if dist_sq < rs*rs:
                         applyOverlap(p1, p2, dx, dy, dist_sq, rs)
-                for ox,oy in neighbor_offsets:
-                    neighbor_key = (cx + ox, cy + oy)
+                for ox in (-1,0,1):
+                    for oy in (-1,0,1):
+                        neighbor_key = (cx + ox, cy + oy)
 
-                    neighbor_particles = grid.get(neighbor_key)
+                        neighbor_particles = grid.get(neighbor_key)
 
-                    if not neighbor_particles:
-                        continue
+                        if not neighbor_particles:
+                            continue
 
-                    for p2 in neighbor_particles:
+                        for p2 in neighbor_particles:
 
-                        dx = p2.pos.x - p1x
-                        dy = p2.pos.y - p1y
-                        rs = p1r + p2.radius
-                        dist_sq = dx*dx + dy*dy
+                            dx = p2.pos.x - p1x
+                            dy = p2.pos.y - p1y
+                            rs = p1r + p2.radius
+                            dist_sq = dx*dx + dy*dy
 
-                        if dist_sq < rs*rs:
-                            applyOverlap(p1, p2, dx, dy, dist_sq, rs)
+                            if dist_sq < rs*rs:
+                                applyOverlap(p1, p2, dx, dy, dist_sq, rs)
             grid[(cx, cy)] = None
     
     def boundCheck(self):
@@ -212,8 +214,8 @@ class Simulation:
         self.applyCollide(pri,other,normalx,normaly)
         expectdist = rs-dist
 
-        correctionx = normalx*(expectdist)
-        correctiony = normaly*(expectdist)
+        correctionx = normalx*expectdist/2
+        correctiony = normaly*expectdist/2
 
         pri.pos.x -= correctionx
         pri.pos.y -= correctiony
@@ -223,24 +225,23 @@ class Simulation:
 
     def applyPhysic(self,part:Particle.Particle):
         part.pos.translate(part.vel)
-        part.vel.translate(part.gravity)
         part.vel.scale(part.velConserve)
 
     def event(self):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
-            elif event.type == pygame.MOUSEBUTTONDOWN:
-                self.particles.append(Particle.Particle(
-                    Vector2d(pygame.mouse.get_pos()).translate(-self.cam).translate(-self.centerPos).translate((random.random(),random.random()))
-                ))
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_SPACE:
                     self.paused = not self.paused
                 elif event.key == pygame.K_f:
                     self.paused = True
                     self.physic()
-    
+        if pygame.mouse.get_pressed()[0]:
+            self.particles.append(Particle.Particle(
+                    Vector2d(pygame.mouse.get_pos()).translate(-self.cam).translate(-self.centerPos).translate((random.random(),random.random()))
+            ))
+
     def dbgOverlay(self):
         font = self.dbgfont
         screen = self.screen

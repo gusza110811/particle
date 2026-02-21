@@ -81,18 +81,9 @@ class Vector2d:
         self.y += translation.y
 
         return self
-    def scale(self,scale:float|int,center:Vector2d=None):
-        if not center:
-            center = Vector2d(0,0)
-
-        centerx = center.x
-        centery = center.y
-
-        relx = self.x - centerx
-        rely = self.y - centery
-
-        self.x = relx*scale + centerx
-        self.y = rely*scale + centery
+    def scale(self,scale:float|int):
+        self.x *= scale
+        self.y *= scale
 
         return self
     
