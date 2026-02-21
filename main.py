@@ -35,7 +35,7 @@ class Simulation:
 
         for idx in range(250):
             for idk in range(1,5):
-                part = Particle.Particle((570,-400+idk*Particle.Particle.radius*1.5))
+                part = Particle.Particle((800,-600+idk*Particle.Particle.radius*1.5))
                 part.vel.x -= 1
                 self.buffer.append(part)
 
