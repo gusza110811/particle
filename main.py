@@ -15,9 +15,10 @@ class Simulation:
         self.verticalLim = screen.get_height()
         self.centerPos = Vector2d(screen.get_width()//2,screen.get_height()//2)
         self.cam = Vector2d(0,0)
+        self.camZoom = -1
 
-        self.borderTopLeft = Vector2d(-screen.get_width()//2,-screen.get_height()//2)
-        self.borderBottomRight = Vector2d(screen.get_width()//2,screen.get_height()//2)
+        self.borderTopLeft = Vector2d(-screen.get_width(),-screen.get_height())
+        self.borderBottomRight = Vector2d(screen.get_width(),screen.get_height())
 
         self.particles:list[Particle.Particle] = []
         self.cell_size = Particle.Particle.radius*2
@@ -32,9 +33,9 @@ class Simulation:
 
         self.buffer = []
 
-        for idx in range(500):
+        for idx in range(250):
             for idk in range(1,5):
-                part = Particle.Particle((370,-200+idk*Particle.Particle.radius*1.5))
+                part = Particle.Particle((570,-400+idk*Particle.Particle.radius*1.5))
                 part.vel.x -= 1
                 self.buffer.append(part)
 
@@ -65,15 +66,15 @@ class Simulation:
         centerPos = self.centerPos
         horLim = self.horizontalLim
         verLim = self.verticalLim
-        r = Particle.Particle.radius
+        r = max(Particle.Particle.radius * 2**self.camZoom,1)
         d = r*2
         circle_surf = pygame.Surface((d, d), pygame.SRCALPHA)
         pygame.draw.circle(circle_surf, pygame.Color(255,255,255), (r, r), r)
 
         for particle in self.particles:
-            pos = (particle.pos + centerPos).translate(self.cam)
+            pos = (particle.pos - self.cam).scale(2**self.camZoom).translate(centerPos)
             # culling
-            if (abs(pos.x) > horLim+particle.radius) or (abs(pos.y) > verLim+particle.radius):
+            if (abs(pos.x) > horLim+d) or (abs(pos.y) > verLim+d):
                 continue
 
             screen.blit(circle_surf, (pos.x-r, pos.y-r))
@@ -86,12 +87,13 @@ class Simulation:
     def physic(self):
         particles = self.particles
         cs = self.cell_size
+        max_vel = Particle.Particle.radius * 0.5
         self.doGravity()
 
         for _ in range(8):
             self.boundCheck()
             self.overlapCheck(particles,cs)
-            self.doPhysicMethod()
+            self.doPhysicMethod(max_vel)
     def buildGrid(self, particles, cs):
         grid = {}
 
@@ -107,11 +109,11 @@ class Simulation:
 
         return grid
     
-    def doPhysicMethod(self):
+    def doPhysicMethod(self,max_vel):
         particles = self.particles
         applyPhysic = self.applyPhysic
         for id in range(len(particles)):
-            applyPhysic(particles[id])
+            applyPhysic(particles[id],max_vel)
     
     def doGravity(self):
         particles = self.particles
@@ -223,7 +225,11 @@ class Simulation:
         other.pos.x += correctionx
         other.pos.y += correctiony
 
-    def applyPhysic(self,part:Particle.Particle):
+    def applyPhysic(self,part:Particle.Particle,max_vel):
+        # cap velocity to reduce tunneling
+        if part.vel.x*part.vel.x + part.vel.y*part.vel.y > max_vel*max_vel:
+            part.vel = part.vel.normalize().scale(max_vel)
+
         part.pos.translate(part.vel)
         part.vel.scale(part.velConserve)
 
@@ -237,10 +243,37 @@ class Simulation:
                 elif event.key == pygame.K_f:
                     self.paused = True
                     self.physic()
+            elif event.type == pygame.MOUSEWHEEL:
+                self.camZoom += event.y/10
         if pygame.mouse.get_pressed()[0]:
             self.particles.append(Particle.Particle(
-                    Vector2d(pygame.mouse.get_pos()).translate(-self.cam).translate(-self.centerPos).translate((random.random(),random.random()))
+                    Vector2d(pygame.mouse.get_pos()).translate(-self.centerPos).scale(1/2**self.camZoom).translate(self.cam).translate((random.random(),random.random()))
             ))
+        if pygame.mouse.get_pressed()[2]:
+            mouse_pos = Vector2d(pygame.mouse.get_pos()).translate(-self.centerPos).scale(1/2**self.camZoom).translate(self.cam)
+            closest = None
+            closestdist = math.inf
+            for idx, part in enumerate(self.particles):
+                dist = (part.pos-mouse_pos).magnitude()
+                if dist < closestdist:
+                    closest = idx
+                    closestdist = dist
+            
+            if closestdist < part.radius:
+                self.particles.pop(closest)
+        
+        pressed = pygame.key.get_pressed()
+        dir = Vector2d()
+        if pressed[pygame.K_w]:
+            dir.translate((0,-1))
+        if pressed[pygame.K_s]:
+            dir.translate((0,1))
+        if pressed[pygame.K_a]:
+            dir.translate((-1,0))
+        if pressed[pygame.K_d]:
+            dir.translate((1,0))
+        
+        self.cam.translate(dir.scale(10*(2**-self.camZoom)))
 
     def dbgOverlay(self):
         font = self.dbgfont

@@ -11,7 +11,7 @@ class Vector2d:
             if other:
                 raise ValueError("Too many arguments")
         self.x = float(x)
-        if y:
+        if not y is None:
             self.y = float(y)
         else:
             self.y = float(x)

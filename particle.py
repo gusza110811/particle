@@ -9,6 +9,6 @@ class Particle:
         return f"({self.pos} {self.vel})"
 
     gravity = Vector2d(0,0.1)
-    radius = 3
+    radius = 4
     velConserve = 1
     elasticity = 0.99
