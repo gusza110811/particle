@@ -24,6 +24,9 @@ class Vector2d:
                 raise ValueError(f"Cannot add Vector2d to {type(vector).__name__}")
         
         return Vector2d(self.x+vector.x,self.y+vector.y)
+    def __pos__(self):
+        return self.clone()
+    __radd__ = __add__
     def __sub__(self,vector:Vector2d|tuple):
         if not isinstance(vector,Vector2d):
             try:
@@ -32,6 +35,16 @@ class Vector2d:
                 raise ValueError(f"Cannot subtract Vector2d from {type(vector).__name__}")
         
         return Vector2d(self.x-vector.x,self.y-vector.y)
+    def __rsub__(self,vector:Vector2d|tuple):
+        if not isinstance(vector,Vector2d):
+            try:
+                vector = Vector2d(vector)
+            except TypeError:
+                raise ValueError(f"Cannot subtract Vector2d from {type(vector).__name__}")
+        return Vector2d(vector.x-self.x,vector.y-self.y)
+    def __neg__(self):
+
+        return Vector2d(0-self.x,0-self.y)
     def __mul__(self,vector:Vector2d|tuple):
         if not isinstance(vector,Vector2d):
             try:
@@ -40,6 +53,7 @@ class Vector2d:
                 raise ValueError(f"Cannot multiply Vector2d by {type(vector).__name__}")
         
         return Vector2d(self.x*vector.x,self.y*vector.y)
+    __rmul__ = __mul__
     def __truediv__(self,vector:Vector2d|tuple):
         if not isinstance(vector,Vector2d):
             try:
@@ -48,6 +62,14 @@ class Vector2d:
                 raise ValueError(f"Cannot divide Vector2d by {type(vector).__name__}")
         
         return Vector2d(self.x/vector.x,self.y/vector.y)
+    def __rtruediv__(self,vector:Vector2d|tuple):
+        if not isinstance(vector,Vector2d):
+            try:
+                vector = Vector2d(vector)
+            except TypeError:
+                raise ValueError(f"Cannot divide Vector2d by {type(vector).__name__}")
+        
+        return Vector2d(vector.x/self.x,vector.y/self.y)
 
     def translate(self,translation:Vector2d|tuple):
         if not isinstance(translation,Vector2d):
