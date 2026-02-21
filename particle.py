@@ -5,7 +5,7 @@ class Particle:
         self.radius = 20
         self.pos = Vector2d(pos)
         self.vel = Vector2d()
-        self.velConserve = 0.95
+        self.velConserve = 0.90
         self.gravity = Vector2d(0,1)
     
     def onPhysic(self):
@@ -34,3 +34,12 @@ class Particle:
         self.vel.y -= impulse * ny
         other.vel.x += impulse * nx
         other.vel.y += impulse * ny
+    
+    def onOverlap(self,other:"Particle"):
+        dist = (self.pos - other.pos).magnitude()
+        normal = (self.pos - other.pos).normalize()
+
+        pushdenom = 100
+
+        self.vel.translate(normal*dist/pushdenom)
+        other.vel.translate(normal*dist/pushdenom*-1)

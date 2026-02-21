@@ -14,7 +14,7 @@ class Vector2d:
         if y:
             self.y = float(y)
         else:
-            self.y = 0.0
+            self.y = float(x)
     
     def __add__(self,vector:Vector2d|tuple):
         if not isinstance(vector,Vector2d):

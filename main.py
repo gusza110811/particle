@@ -24,17 +24,23 @@ class Simulation:
 
     def main(self):
 
-        for idx in range(15):
-            for idk in range(15):
+        render = 0
+
+        for idx in range(10):
+            for idk in range(10):
                 self.particles.append(Particle.Particle((idx*40-370 + random.random(),idk*40-270)))
 
         while self.running:
             self.event()
             self.physic()
 
-            self.render()
+            if render == 1:
+                self.render()
+                render = 0
+            else:
+                render += 1
 
-            self.clock.tick(30)
+            self.clock.tick(60)
 
     
     def render(self):
@@ -57,23 +63,32 @@ class Simulation:
     
     def physic(self):
         particles = self.particles
-        for particle in particles:
+        for id in range(len(particles)):
 
-            for other in particles:
-                if other is particle: continue
-                if (other.pos - particle.pos).magnitude() < (other.radius + particle.radius):
-                    particle.onCollide(other)
+            for oid in range(id+1,len(particles)):
+                if particles[oid] is particles[id]: continue
+                if (particles[oid].pos - particles[id].pos).magnitude() < (particles[oid].radius + particles[id].radius):
+                    particles[id].onCollide(particles[oid])
             
-            if particle.pos.x < self.borderTopLeft.x:
-                particle.vel.x = abs(particle.vel.x)
-            elif particle.pos.x > self.borderBottomRight.x:
-                particle.vel.x = -abs(particle.vel.x)
-            elif particle.pos.y < self.borderTopLeft.y:
-                particle.vel.y = abs(particle.vel.y)
-            elif particle.pos.y > self.borderBottomRight.y:
-                particle.vel.y = -abs(particle.vel.y)
+            for oid in range(id+1,len(particles)):
+                if particles[oid] is particles[id]: continue
+                if (particles[oid].pos - particles[id].pos).magnitude() < (particles[oid].radius + particles[id].radius):
+                    particles[id].onOverlap(particles[oid])
             
-            particle.onPhysic()
+            if particles[id].pos.x < self.borderTopLeft.x:
+                particles[id].vel.x = abs(particles[id].vel.x)
+                particles[id].pos.x = self.borderTopLeft.x
+            elif particles[id].pos.x > self.borderBottomRight.x:
+                particles[id].vel.x = -abs(particles[id].vel.x)
+                particles[id].pos.x = self.borderBottomRight.x
+            elif particles[id].pos.y < self.borderTopLeft.y:
+                particles[id].vel.y = abs(particles[id].vel.y)
+                particles[id].pos.y = self.borderTopLeft.y
+            elif particles[id].pos.y > self.borderBottomRight.y:
+                particles[id].vel.y = -abs(particles[id].vel.y)
+                particles[id].pos.y = self.borderBottomRight.y
+            
+            particles[id].onPhysic()
 
 
     def event(self):
