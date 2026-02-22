@@ -11,27 +11,28 @@ class Simulation:
         self.clock = pygame.time.Clock()
         self.dbgfont = pygame.font.Font(size=20)
 
-        self.horizontalLim = 500
-        self.verticalLim = 500
+        self.horizontalLim = 512
+        self.verticalLim = 512
         self.screenHorLim = screen.get_width()
         self.screenVerLim = screen.get_height()
         self.centerPos = Vector2d(screen.get_width()//2,screen.get_height()//2)
         self.cam = Vector2d(0,0)
 
         # camZoom is the power of 2 to scale the world by when rendering, so camZoom of 1 means 2x zoom, camZoom of -1 means 0.5x zoom
-        self.camZoom = math.log2((self.screenVerLim/2)/self.verticalLim)
+        self.camZoom = round(math.log2((self.screenVerLim/2)/self.verticalLim),1)
         #self.camZoom = 0
 
         self.borderTopLeft = Vector2d(self.horizontalLim*-1,self.verticalLim*-1)
         self.borderBottomRight = Vector2d(self.horizontalLim,self.verticalLim)
 
-        self.gravityRate = Vector2d(0,1)
+        self.gravityRate = Vector2d(0,0.2)
         self.radius = 4
         self.velConserve = 1
         self.elasticity = 1
 
         self.particles:list[Particle.Particle] = []
         self.cell_size = self.radius*2
+        self.substep = 8
 
         self.paused = False
 
@@ -43,7 +44,7 @@ class Simulation:
 
         self.buffer = []
 
-        for idx in range(300):
+        for idx in range(400):
             for idk in range(1,5):
                 part = Particle.Particle((0,-self.verticalLim+idk*self.radius*1.5))
                 part.vel.x -= 10
@@ -53,7 +54,7 @@ class Simulation:
 
         while self.running:
             self.frame(clock.get_time()/1000)
-            clock.tick()
+            clock.tick(30)
     
     def frame(self,dt):
         buffer = self.buffer
@@ -81,8 +82,7 @@ class Simulation:
         verLim = self.screenVerLim
         r = max(radius * 2**self.camZoom,1)
         d = r*2
-        circle_surf = pygame.Surface((d, d), pygame.SRCALPHA)
-        pygame.draw.circle(circle_surf, pygame.Color(255,255,255), (r, r), r)
+        max_vel = radius*self.substep
 
         for particle in self.particles:
             pos = (particle.pos - self.cam).scale(2**self.camZoom).translate(centerPos)
@@ -90,7 +90,9 @@ class Simulation:
             if (abs(pos.x) > horLim+d) or (abs(pos.y) > verLim+d):
                 continue
 
-            screen.blit(circle_surf, (pos.x-r, pos.y-r))
+            bright = int(min((particle.vel.magnitude() / max_vel) * 510+20,255))
+
+            pygame.draw.circle(screen, pygame.Color(bright,bright,bright), (pos.x,pos.y), r)
         
         if self.debug:
             self.dbgOverlay()
@@ -105,30 +107,33 @@ class Simulation:
         particles = self.particles
         cs = self.cell_size
         rs = radius*2
+        rssq = rs*rs
 
-        substep = 16
+        substep = self.substep
         substepsize = 1/substep
         max_vel = radius*substep
+
+        grid, sx, sy = self.buildGrid(particles,cs)
 
         for _ in range(substep):
             self.doGravity(gravity,substepsize)
             self.boundCheck(elasticity,substepsize)
-            self.overlapCheck(particles,cs,elasticity,rs)
+            self.overlapCheck(grid,sx,sy,elasticity,rs,rssq)
             self.doPhysicMethod(max_vel,velConserve,substepsize)
     def buildGrid(self, particles, cs):
-        grid = {}
+        sizex = self.horizontalLim//self.radius
+        sizey = self.verticalLim//self.radius
+        grid = [[[] for _ in range(sizex)] for _ in range(sizey)]
 
         for p in particles:
             cx = int(p.pos.x // cs)
             cy = int(p.pos.y // cs)
+            if cx >= sizex or cy >= sizey:
+                continue
 
-            key = (cx, cy)
-            if key in grid:
-                grid[key].append(p)
-            else:
-                grid[key] = [p]
+            grid[cx][cy].append(p)
 
-        return grid
+        return grid, sizex, sizey
     
     def doPhysicMethod(self,max_vel,velConserve,subStepSize):
         particles = self.particles
@@ -146,35 +151,38 @@ class Simulation:
     def gravity(self,part,gravity):
         part.vel.translate(gravity)
     
-    def overlapCheck(self, particles, cs, elasticity, rs):
+    def overlapCheck(self, grid, sx, sy, elasticity, rs, rssq):
         applyOverlap = self.applyOverlap
-        grid:dict[tuple[int,int],list[Particle.Particle]] = self.buildGrid(particles,cs)
 
-        for (cx, cy), cell_particles in grid.items():
+        for cx, row in enumerate(grid):
+            for cy, cell_particles in enumerate(row):
+                for p1 in cell_particles:
+                    p1x = p1.pos.x
+                    p1y = p1.pos.y
+                    # Check this cell and neighbors
+                    for ox in (-1,0,1):
+                        for oy in (-1,0,1):
+                            x = cx+ox
+                            y = cy+oy
 
-            for id1 in range(len(cell_particles)):
-                p1 = cell_particles[id1]
-                p1x = p1.pos.x
-                p1y = p1.pos.y
-                # Check this cell and neighbors
-                for ox in (-1,0,1):
-                    for oy in (-1,0,1):
-                        neighbor_key = (cx + ox, cy + oy)
+                            if x >= sx or y >= sy:
+                                continue
 
-                        neighbor_particles = grid.get(neighbor_key)
+                            neighbor_particles = grid[x][y]
 
-                        if not neighbor_particles:
-                            continue
+                            if not neighbor_particles:
+                                continue
 
-                        for p2 in neighbor_particles:
+                            for p2 in neighbor_particles:
 
-                            dx = p2.pos.x - p1x
-                            dy = p2.pos.y - p1y
-                            dist_sq = dx*dx + dy*dy
+                                p2pos = p2.pos
 
-                            if dist_sq < rs*rs:
-                                applyOverlap(p1, p2, dx, dy, dist_sq, rs, elasticity)
-            #grid[(cx, cy)] = None
+                                dx = p2pos.x - p1x
+                                dy = p2pos.y - p1y
+                                dist_sq = dx*dx + dy*dy
+
+                                if dist_sq < rssq:
+                                    applyOverlap(p1, p2, dx, dy, dist_sq, rs, elasticity)
     
     def boundCheck(self, elasticity, substepsize):
         if self.borderType == 0:
@@ -186,11 +194,13 @@ class Simulation:
         particles = self.particles
         # circle boundary
         radius = self.verticalLim
+        radiussq = radius*radius
         for id in range(len(particles)):
             particle = particles[id]
-            dist = math.sqrt(particle.pos.x*particle.pos.x + particle.pos.y*particle.pos.y)
+            distsq = particle.pos.x*particle.pos.x + particle.pos.y*particle.pos.y
 
-            if radius < dist:
+            if radiussq < distsq:
+                dist = math.sqrt(distsq)
                 correctionx = particle.pos.x / dist * (radius - dist)
                 correctiony = particle.pos.y / dist * (radius - dist)
                 correctionx *= substepsize
@@ -244,13 +254,11 @@ class Simulation:
     def applyOverlap(self,pri:Particle.Particle,other:Particle.Particle,
                      dx, dy, dist_sq, rs, elasticity):
         dist = math.sqrt(dist_sq)
-        try:
+        if dist > 0:
             normalx = dx/dist
-        except ZeroDivisionError:
-            normalx = 0
-        try:
             normaly = dy/dist
-        except ZeroDivisionError:
+        else:
+            normalx = 0
             normaly = 0
         self.applyCollide(pri,other,normalx,normaly,elasticity)
         expectdist = rs-dist
