@@ -81,9 +81,14 @@ class Vector2d:
         self.y += translation.y
 
         return self
-    def scale(self,scale:float|int):
-        self.x *= scale
-        self.y *= scale
+    def scale(self,scale:Vector2d):
+        if not isinstance(scale,Vector2d):
+            try:
+                scale = Vector2d(scale)
+            except TypeError:
+                raise ValueError(f"Cannot scale Vector2d by {type(scale).__name__}")
+        self.x *= scale.x
+        self.y *= scale.y
 
         return self
     
