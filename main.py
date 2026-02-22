@@ -3,6 +3,7 @@ from vector import Vector2d
 import pygame
 import random
 import math
+import colorsys
 
 class Simulation:
     def __init__(self, screen:pygame.Surface):
@@ -38,7 +39,7 @@ class Simulation:
 
         self.debug = True
 
-        self.borderType = 1 # 0 for circle, 1 for square
+        self.borderType = 0 # 0 for circle, 1 for square
 
     def main(self):
 
@@ -47,7 +48,7 @@ class Simulation:
         for idx in range(400):
             for idk in range(1,5):
                 part = Particle.Particle((0,-self.verticalLim+idk*self.radius*1.5))
-                part.vel.x -= 10
+                part.vel.x -= 100
                 self.buffer.append(part)
         
         clock = self.clock
@@ -89,10 +90,24 @@ class Simulation:
             # culling
             if (abs(pos.x) > horLim+d) or (abs(pos.y) > verLim+d):
                 continue
+            
+            # by direction
+            #color = [int(color*255) for color in
+            #        colorsys.hsv_to_rgb(
+            #            (math.atan2(*particle.vel.normalize().tuple())+math.pi)/math.tau,
+            #            1,1
+            #        )
+            #]
 
-            bright = int(min((particle.vel.magnitude() / max_vel) * 510+20,255))
+            # by speed
+            color = [int(color*255) for color in
+                colorsys.hsv_to_rgb(
+                    min(particle.vel.magnitude()/max_vel,0.9),
+                    1,1
+                )
+            ]
 
-            pygame.draw.circle(screen, pygame.Color(bright,bright,bright), (pos.x,pos.y), r)
+            pygame.draw.circle(screen, color, (pos.x,pos.y), r)
         
         if self.debug:
             self.dbgOverlay()
@@ -223,7 +238,7 @@ class Simulation:
             elif particles[id].pos.x > self.borderBottomRight.x:
                 particles[id].vel.x = -abs(particles[id].vel.x) * elasticity * substepsize
                 particles[id].pos.x = self.borderBottomRight.x
-            elif particles[id].pos.y < self.borderTopLeft.y:
+            if particles[id].pos.y < self.borderTopLeft.y:
                 particles[id].vel.y = abs(particles[id].vel.y) * elasticity * substepsize
                 particles[id].pos.y = self.borderTopLeft.y
             elif particles[id].pos.y > self.borderBottomRight.y:
