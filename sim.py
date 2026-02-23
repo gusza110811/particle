@@ -5,6 +5,8 @@ from vector import Vector2d
 import math
 import argparse
 import time
+import io
+import threading
 
 class Simulation:
     def __init__(self):
@@ -25,22 +27,20 @@ class Simulation:
         self.cell_size = self.radius*2
         self.substep = 8
 
-        self.paused = False
-        self.video = False
-        self.output = None
+        self.output:io.FileIO = None
 
         self.debug = True
 
         self.borderType = 1 # 0 for circle, 1 for square
 
     def main(self):
-        self.buffer = []
+        self.pbuffer = []
         for idx in range(400):
             for idk in range(1,5):
                 part = Particle.Particle((0,-self.verticalLim+idk*self.radius*1.5))
                 part.vel.x -= 100
-                self.buffer.append(part)
-        buffer = self.buffer
+                self.pbuffer.append(part)
+        buffer = self.pbuffer
         # write header for simulation file output
         self.output.write(b"\xFFPARTSIM")
         self.output.write((1).to_bytes(1,'little'))
@@ -51,35 +51,48 @@ class Simulation:
         timestart = time.time()
         while self.running:
             timeb = time.perf_counter()
-            if not self.paused:
-                if buffer:
-                    self.particles.append(buffer.pop())
-                    self.particles.append(buffer.pop())
-                    self.particles.append(buffer.pop())
-                    self.particles.append(buffer.pop())
-                self.physic()
+            if buffer:
+                self.particles.append(buffer.pop())
+                self.particles.append(buffer.pop())
+                self.particles.append(buffer.pop())
+                self.particles.append(buffer.pop())
+            self.physic()
             self.saveFrame()
             if self.frame >= self.targetFrames:
                 self.running = False
             timetaken = time.perf_counter() - timeb
             print(f"frame {self.frame}/{self.targetFrames} {timetaken*1000:4.0f}ms  ",end="\r",file=sys.stderr)
-        print(f"\ndone, took {time.time()-timestart:.4f} seconds",file=sys.stderr)
+        print(f"\ntook {time.time()-timestart:.4f} seconds",file=sys.stderr)
+        writing = True
+        def blink():
+            while writing:
+                print("\b.",end="",flush=True)
+                time.sleep(0.1)
+                print("\b ",end="",flush=True)
+                time.sleep(0.1)
+        print("writing ",end="")
+        blinkthread = threading.Thread(target=blink,daemon=True)
+        blinkthread.start()
+        self.output.write(self.buffer)
+        writing = False
+        print("\ndone")
     
     def initHeadless(self,output,targetFrames):
+        self.buffer = bytearray()
         self.output = output
         self.frame = 0
         self.targetFrames = targetFrames
     
     def saveFrame(self):
-        output = self.output
         particles = self.particles
         # output format: [frame id u32] [particle count u32]
         # [particle x f32] [particle y f32]
-        output.write(self.frame.to_bytes(4,'little'))
-        output.write(len(particles).to_bytes(4,'little'))
+        buffer = self.buffer
+        buffer.extend(self.frame.to_bytes(4,'little'))
+        buffer.extend(len(particles).to_bytes(4,'little'))
         for part in particles:
-            output.write(bytearray(struct.pack("f",part.pos.x)))
-            output.write(bytearray(struct.pack("f",part.pos.y)))
+            buffer.extend(bytearray(struct.pack("f",part.pos.x)))
+            buffer.extend(bytearray(struct.pack("f",part.pos.y)))
         self.frame += 1
     
     def physic(self):
