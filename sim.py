@@ -2,9 +2,9 @@ import struct
 import sys
 import particle as Particle
 from vector import Vector2d
-import random
 import math
-import colorsys
+import argparse
+import time
 
 class Simulation:
     def __init__(self):
@@ -34,31 +34,23 @@ class Simulation:
         self.borderType = 1 # 0 for circle, 1 for square
 
     def main(self):
-
         self.buffer = []
-
         for idx in range(400):
             for idk in range(1,5):
                 part = Particle.Particle((0,-self.verticalLim+idk*self.radius*1.5))
                 part.vel.x -= 100
                 self.buffer.append(part)
-        
         buffer = self.buffer
-
-        doVideo = self.video
-
-        if doVideo:
-            clock = self.clock
-        else:
-            # write header for video output
-            # format: [magic] [version u8] [horizontalLim u16] [verticalLim u16] [radius f32] [borderType u8]
-            self.output.write(b"\xFFPARTSIM")
-            self.output.write((1).to_bytes(1,'little'))
-            self.output.write(self.horizontalLim.to_bytes(4,'little'))
-            self.output.write(self.verticalLim.to_bytes(4,'little'))
-            self.output.write(bytearray(struct.pack("<f",self.radius)))
-            self.output.write(self.borderType.to_bytes(1,'little'))
+        # write header for simulation file output
+        self.output.write(b"\xFFPARTSIM")
+        self.output.write((1).to_bytes(1,'little'))
+        self.output.write(self.horizontalLim.to_bytes(4,'little'))
+        self.output.write(self.verticalLim.to_bytes(4,'little'))
+        self.output.write(bytearray(struct.pack("<f",self.radius)))
+        self.output.write(self.borderType.to_bytes(1,'little'))
+        timestart = time.time()
         while self.running:
+            timeb = time.perf_counter()
             if not self.paused:
                 if buffer:
                     self.particles.append(buffer.pop())
@@ -66,52 +58,17 @@ class Simulation:
                     self.particles.append(buffer.pop())
                     self.particles.append(buffer.pop())
                 self.physic()
-
-            if doVideo:
-                dt = clock.get_time()/1000
-                self.render()
-                self.event(dt)
-                clock.tick(30)
-            else:
-                self.saveFrame()
-                if self.frame >= self.targetFrames:
-                    self.running = False
-                print(f"frame {self.frame}/{self.targetFrames}",end="\r",file=sys.stderr)
-        if not doVideo:
-            print("\ndone",file=sys.stderr)
+            self.saveFrame()
+            if self.frame >= self.targetFrames:
+                self.running = False
+            timetaken = time.perf_counter() - timeb
+            print(f"frame {self.frame}/{self.targetFrames} {timetaken*1000:4.0f}ms  ",end="\r",file=sys.stderr)
+        print(f"\ndone, took {time.time()-timestart:.4f} seconds",file=sys.stderr)
     
     def initHeadless(self,output,targetFrames):
         self.output = output
         self.frame = 0
         self.targetFrames = targetFrames
-    
-    def initGraphics(self):
-        import pygame
-        pygame.init()
-        pygame.font.init()
-        self.clock = pygame.time.Clock()
-        self.dbgfont = pygame.font.Font(size=20)
-        self.output = None
-        self.Color = pygame.Color
-        self.display = pygame.display
-        self.draw = pygame.draw
-
-        self.pygame = pygame
-        self.mouse = pygame.mouse
-        self.key = pygame.key
-
-        screen = pygame.display.set_mode((960,720))
-        self.screen = screen
-        self.screenHorLim = screen.get_width()
-        self.screenVerLim = screen.get_height()
-        self.centerPos = Vector2d(screen.get_width()//2,screen.get_height()//2)
-        self.cam = Vector2d(0,0)
-
-        # camZoom is the power of 2 to scale the world by when rendering, so camZoom of 1 means 2x zoom, camZoom of -1 means 0.5x zoom
-        self.camZoom = round(math.log2((self.screenVerLim/2)/self.verticalLim),1)
-        #self.camZoom = 0
-        self.video = True
-        return screen
     
     def saveFrame(self):
         output = self.output
@@ -124,48 +81,6 @@ class Simulation:
             output.write(bytearray(struct.pack("f",part.pos.x)))
             output.write(bytearray(struct.pack("f",part.pos.y)))
         self.frame += 1
-
-    def render(self):
-        screen = self.screen
-
-        screen.fill(self.Color(0,0,0))
-        radius = self.radius
-
-        centerPos = self.centerPos
-        horLim = self.screenHorLim
-        verLim = self.screenVerLim
-        r = math.ceil(max(radius * 2**self.camZoom,1)*1.1)
-        d = r*2
-        max_vel = radius*self.substep
-
-        for particle in self.particles:
-            pos = (particle.pos - self.cam).scale(2**self.camZoom).translate(centerPos)
-            # culling
-            if (abs(pos.x) > horLim+d) or (abs(pos.y) > verLim+d):
-                continue
-            
-            # by direction
-            #color = [int(color*255) for color in
-            #        colorsys.hsv_to_rgb(
-            #            (math.atan2(*particle.vel.normalize().tuple())+math.pi)/math.tau,
-            #            1,1
-            #        )
-            #]
-
-            # by speed
-            color = [int(color*255) for color in
-                colorsys.hsv_to_rgb(
-                    min(particle.vel.magnitude()/max_vel,0.9), # dont circle back to red please
-                    1,1
-                )
-            ]
-
-            self.draw.circle(screen, color, (pos.x,pos.y), r)
-        
-        if self.debug:
-            self.dbgOverlay()
-
-        self.display.flip()
     
     def physic(self):
         gravity = self.gravityRate
@@ -355,73 +270,27 @@ class Simulation:
         vel.x -= lossx
         vel.y -= lossy
 
-    def event(self,dt):
-        for event in self.pygame.event.get():
-            if event.type == self.pygame.QUIT:
-                self.running = False
-            elif event.type == self.pygame.KEYDOWN:
-                if event.key == self.pygame.K_SPACE:
-                    self.paused = not self.paused
-                elif event.key == self.pygame.K_f:
-                    self.paused = True
-                    self.physic()
-            elif event.type == self.pygame.MOUSEWHEEL:
-                self.camZoom += event.y/10
-        if self.mouse.get_pressed()[0]:
-            self.particles.append(Particle.Particle(
-                    Vector2d(self.mouse.get_pos()).translate(-self.centerPos).scale(1/2**self.camZoom).translate(self.cam).translate((random.random(),random.random()))
-            ))
-        if self.mouse.get_pressed()[2]:
-            mouse_pos = Vector2d(self.mouse.get_pos()).translate(-self.centerPos).scale(1/2**self.camZoom).translate(self.cam)
-            closest = None
-            closestdist = math.inf
-            for idx, part in enumerate(self.particles):
-                dist = (part.pos-mouse_pos).magnitude()
-                if dist < closestdist:
-                    closest = idx
-                    closestdist = dist
-            
-            if closestdist < self.radius:
-                self.particles.pop(closest)
-        
-        pressed = self.key.get_pressed()
-        dir = Vector2d()
-        if pressed[self.pygame.K_w]:
-            dir.translate((0,-1))
-        if pressed[self.pygame.K_s]:
-            dir.translate((0,1))
-        if pressed[self.pygame.K_a]:
-            dir.translate((-1,0))
-        if pressed[self.pygame.K_d]:
-            dir.translate((1,0))
-        
-        self.cam.translate(dir.scale(300*(2**-self.camZoom)*dt))
-
-    def dbgOverlay(self):
-        font = self.dbgfont
-        screen = self.screen
-        items = [
-            f"fps: {self.clock.get_fps()}",
-            f"objects: {len(self.particles)}",
-            "paused" if self.paused else "unpaused",
-            f"zoom: {2**self.camZoom:.2f}x",
-        ]
-
-        for idx, item in enumerate(items):
-            text = font.render(item,True,self.Color(0,255,0))
-            screen.blit(text,(0,idx*20))
-
-
 def test():
-    sim = Simulation()
-    sim.initGraphics()
-    sim.main()
-
-def testHeadless():
     sim = Simulation()
     with open("output.sim","wb") as f:
         sim.initHeadless(f,1000)
         sim.main()
 
 if __name__ == "__main__":
-    testHeadless()
+    argparser = argparse.ArgumentParser(description="Run particle simulation")
+    argparser.add_argument("--output", "-o", type=str, default="output.sim", help="Output file for simulation data", nargs="?")
+    argparser.add_argument("--frames", "-f", type=int, default=1000, help="Number of frames to simulate")
+    args = argparser.parse_args()
+
+    output_file = args.output
+    if output_file == "-":
+        output_file = sys.stdout.buffer
+    else:
+        output_file = open(output_file, "wb")
+    
+    frames = args.frames
+    sim = Simulation()
+    sim.initHeadless(output_file,frames)
+    sim.main()
+
+    output_file.close()

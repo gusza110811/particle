@@ -89,7 +89,7 @@ class Renderer:
     def render(self,particles:list[Vector2d]):
         horLim = self.screenHorLim
         verLim = self.screenVerLim
-        r = math.ceil(max(self.radius * 2**self.camZoom,1)*1.1)
+        r = math.ceil(max(self.radius * 2**self.camZoom,1))
         d = r*2
         centerPos = self.centerPos
         for particle in particles:
@@ -131,7 +131,21 @@ class Renderer:
         
         self.cam.translate(dir.scale(300*(2**-self.camZoom)*dt))
 
-if __name__ == "__main__":
+def test():
     with open("output.sim","rb") as source:
         renderer = Renderer(source)
         renderer.main()
+
+def testpiped():
+    import subprocess
+    proc = subprocess.Popen([sys.executable,"sim.py","-o-","-f1000"],stdout=subprocess.PIPE)
+    renderer = Renderer(proc.stdout)
+    renderer.main()
+
+if __name__ == "__main__":
+    DOPIPEDTEST = False
+
+    if DOPIPEDTEST:
+        testpiped()
+    else:
+        test()
