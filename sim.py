@@ -37,7 +37,7 @@ class Simulation:
 
         self.buffer = []
 
-        for idx in range(1):
+        for idx in range(400):
             for idk in range(1,5):
                 part = Particle.Particle((0,-self.verticalLim+idk*self.radius*1.5))
                 part.vel.x -= 100
@@ -54,9 +54,9 @@ class Simulation:
             # format: [magic] [version u8] [horizontalLim u16] [verticalLim u16] [radius f32] [borderType u8]
             self.output.write(b"\xFFPARTSIM")
             self.output.write((1).to_bytes(1,'little'))
-            self.output.write(self.horizontalLim.to_bytes(2,'little'))
-            self.output.write(self.verticalLim.to_bytes(2,'little'))
-            self.output.write(bytearray(struct.pack("f",self.radius)))
+            self.output.write(self.horizontalLim.to_bytes(4,'little'))
+            self.output.write(self.verticalLim.to_bytes(4,'little'))
+            self.output.write(bytearray(struct.pack("<f",self.radius)))
             self.output.write(self.borderType.to_bytes(1,'little'))
         while self.running:
             if not self.paused:
@@ -116,9 +116,9 @@ class Simulation:
     def saveFrame(self):
         output = self.output
         particles = self.particles
-        # output format: [frame id u16] [particle countu32]
+        # output format: [frame id u32] [particle count u32]
         # [particle x f32] [particle y f32]
-        output.write(self.frame.to_bytes(2,'little'))
+        output.write(self.frame.to_bytes(4,'little'))
         output.write(len(particles).to_bytes(4,'little'))
         for part in particles:
             output.write(bytearray(struct.pack("f",part.pos.x)))
@@ -165,7 +165,7 @@ class Simulation:
         if self.debug:
             self.dbgOverlay()
 
-        self.display.update()
+        self.display.flip()
     
     def physic(self):
         gravity = self.gravityRate
@@ -420,8 +420,8 @@ def test():
 def testHeadless():
     sim = Simulation()
     with open("output.sim","wb") as f:
-        sim.initHeadless(f,20)
+        sim.initHeadless(f,1000)
         sim.main()
 
 if __name__ == "__main__":
-    test()
+    testHeadless()

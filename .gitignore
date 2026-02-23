@@ -4,4 +4,4 @@
 __pycache__
 
 *.svg
-*.sim
+*.sim*
