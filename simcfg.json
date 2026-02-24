@@ -1,0 +1,26 @@
+{
+    "gravity":[0,0.2],
+    "simSize": [512,512],
+    "radius":4,
+    "dampening":0,
+    "elasticity":0.95,
+    "substep":8,
+    "velLimit":32,
+
+    "emitters": [
+        {
+            "pos":[-1,512],
+            "area":[2,1],
+            "startVel":[-1,-20],
+            "timeToLive":100,
+            "timeToStart":0
+        },
+        {
+            "pos":[1,512],
+            "area":[2,1],
+            "startVel":[1,-20],
+            "timeToLive":100,
+            "timeToStart":0
+        }
+    ]
+}

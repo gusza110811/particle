@@ -7,6 +7,15 @@ import argparse
 import time
 import io
 import threading
+import json
+
+class Emitter:
+    def __init__(self, pos:Vector2d, area:Vector2d, startVel:Vector2d, timeToLive:int, timeToStart:int):
+        self.pos = pos
+        self.area = area
+        self.startVel = startVel
+        self.timeToLive = timeToLive
+        self.timeToStart = timeToStart
 
 class Simulation:
     def __init__(self):
@@ -23,9 +32,11 @@ class Simulation:
         self.velConserve = 1
         self.elasticity = 0.95
 
+        self.emitters:list[Emitter] = []
         self.particles:list[Particle.Particle] = []
         self.cell_size = self.radius*2
         self.substep = 8
+        self.velLimit = 32
 
         self.output:io.FileIO = None
 
@@ -33,15 +44,14 @@ class Simulation:
         self.writeFrame = True
 
         self.borderType = 1 # 0 for circle, 1 for square
+    
+    def addEmitter(self, emitter:Emitter):
+        self.emitters.append(emitter)
+
+    def addEmitters(self, emitters:list[Emitter]):
+        self.emitters.extend(emitters)
 
     def main(self):
-        self.pbuffer = []
-        for idx in range(400):
-            for idk in range(1,5):
-                part = Particle.Particle((0,-self.verticalLim+idk*self.radius*1.5))
-                part.vel.x -= 100
-                self.pbuffer.append(part)
-        buffer = self.pbuffer
         # write header for simulation file output
         self.output.write(b"\xFFPARTSIM")
         self.output.write((1).to_bytes(1,'little'))
@@ -54,17 +64,13 @@ class Simulation:
         timestart = time.time()
         while self.running:
             timeb = time.perf_counter()
-            if buffer:
-                self.particles.append(buffer.pop())
-                self.particles.append(buffer.pop())
-                self.particles.append(buffer.pop())
-                self.particles.append(buffer.pop())
+            self.Emit()
             self.physic()
-            self.saveFrame(writeFrame)
-            if self.frame >= self.targetFrames:
+            if self.frame >= self.targetFrames and self.targetFrames > 0: # negative frame count means indefinite
                 self.running = False
             timetaken = time.perf_counter() - timeb
-            print(f"frame {self.frame}/{self.targetFrames} {timetaken*1000:4.0f}ms  ",end="\r",file=sys.stderr)
+            print(f"frame {self.frame}" + ("/" + str(self.targetFrames) if self.targetFrames > 0 else "") + f"{timetaken*1000:4.0f}ms  ",end="\r",file=sys.stderr)
+            self.saveFrame(writeFrame)
         print(f"\ntook {time.time()-timestart:.4f} seconds",file=sys.stderr)
         if not writeFrame:
             writing = True
@@ -101,9 +107,38 @@ class Simulation:
             buffer.extend(bytearray(struct.pack("f",part.pos.x)))
             buffer.extend(bytearray(struct.pack("f",part.pos.y)))
         if write:
-            self.output.write(buffer)
+            try:
+                self.output.write(buffer)
+            except BrokenPipeError:
+                self.running = False
+                print("\nOutput pipe closed, stopping simulation", file=sys.stderr)
         self.frame += 1
     
+    def Emit(self):
+        emitters = self.emitters
+        particles = self.particles
+        diameter = self.radius*2
+        for idx, emitter in enumerate(emitters):
+            if emitter.timeToStart <= 0:
+                for x in range(int(emitter.area.x)):
+                    for y in range(int(emitter.area.y)):
+                        pos = Vector2d(
+                            emitter.pos.x+x*diameter,
+                            emitter.pos.y+y*diameter
+                        )
+                        vel = Vector2d(
+                            emitter.startVel.x,
+                            emitter.startVel.y
+                        )
+                        particles.append(Particle.Particle(pos,vel))
+                emitter.timeToLive -= 1
+                if emitter.timeToLive <= 0:
+                    emitters[idx] = None
+            else:
+                emitter.timeToStart -= 1
+        
+        self.emitters = [e for e in emitters if e is not None]
+
     def physic(self):
         gravity = self.gravityRate
         radius = self.radius
@@ -116,7 +151,7 @@ class Simulation:
 
         substep = self.substep
         substepsize = 1/substep
-        max_vel = radius*substep
+        max_vel = self.velLimit
 
         grid, sx, sy = self.buildGrid(particles,cs)
 
@@ -223,16 +258,16 @@ class Simulation:
         # square boundary
         for id in range(len(particles)):
             if particles[id].pos.x < self.borderTopLeft.x:
-                particles[id].vel.x = abs(particles[id].vel.x) * elasticity * substepsize
+                particles[id].vel.x = abs(particles[id].vel.x) * elasticity
                 particles[id].pos.x = self.borderTopLeft.x
             elif particles[id].pos.x > self.borderBottomRight.x:
-                particles[id].vel.x = -abs(particles[id].vel.x) * elasticity * substepsize
+                particles[id].vel.x = -abs(particles[id].vel.x) * elasticity
                 particles[id].pos.x = self.borderBottomRight.x
             if particles[id].pos.y < self.borderTopLeft.y:
-                particles[id].vel.y = abs(particles[id].vel.y) * elasticity * substepsize
+                particles[id].vel.y = abs(particles[id].vel.y) * elasticity
                 particles[id].pos.y = self.borderTopLeft.y
             elif particles[id].pos.y > self.borderBottomRight.y:
-                particles[id].vel.y = -abs(particles[id].vel.y) * elasticity * substepsize
+                particles[id].vel.y = -abs(particles[id].vel.y) * elasticity
                 particles[id].pos.y = self.borderBottomRight.y
     # assume all particle have equal mass
     def applyCollide(self,pri:Particle.Particle,other:Particle.Particle,
@@ -298,11 +333,71 @@ def test():
         sim.initHeadless(f,1000)
         sim.main()
 
+def loadConfig(sim:Simulation,filename:str="simcfg.json"):
+    with open(filename,"r") as f:
+        data:dict = json.load(f)
+
+    simSize = data.get("simSize", [None, None])
+    if simSize[0] is not None and simSize[1] is not None:
+        sim.horizontalLim = simSize[0]
+        sim.verticalLim = simSize[1]
+    else:
+        print("No simulation size (SimSize) specified, using default 512x512", file=sys.stderr)
+    
+    gravity = data.get("gravity", None)
+    if gravity is not None:
+        sim.gravityRate = Vector2d(gravity[0], gravity[1])
+    else:
+        print("No gravity specified, using default (0,0.2)", file=sys.stderr)
+
+    radius = data.get("radius", None)
+    if radius is not None:
+        sim.radius = radius
+    else:
+        print("No particle radius specified, using default 4", file=sys.stderr)
+    
+    dampening = data.get("dampening", None)
+    if dampening is not None:
+        sim.velConserve = 1 - dampening
+    else:
+        print("No dampening specified, using default 0 (no dampening)", file=sys.stderr)
+    
+    elasticity = data.get("elasticity", None)
+    if elasticity is not None:
+        sim.elasticity = elasticity
+    else:
+        print("No elasticity specified, using default 0.95", file=sys.stderr)
+    
+    substep = data.get("substep", None)
+    if substep is not None:
+        sim.substep = substep
+    else:
+        print("No substep count (substep) specified, using default 8", file=sys.stderr)
+    
+    velLimit = data.get("velLimit", None)
+    if substep is not None:
+        sim.velLimit = velLimit
+    else:
+        print("No velocity limit (velLimit) specified, using default 32", file=sys.stderr)
+
+    emitters = []
+    emitterList = data.get("emitters", [])
+    if emitterList:
+        for item in emitterList:
+            pos = Vector2d(item["pos"][0],item["pos"][1])
+            area = Vector2d(item["area"][0],item["area"][1])
+            startVel = Vector2d(item["startVel"][0],item["startVel"][1])
+            timeToLive = item["timeToLive"]
+            timeToStart = item["timeToStart"]
+            emitters.append(Emitter(pos,area,startVel,timeToLive,timeToStart))
+        sim.addEmitters(emitters)
+
 if __name__ == "__main__":
     argparser = argparse.ArgumentParser(description="Run particle simulation")
     argparser.add_argument("--output", "-o", type=str, default="output.sim", help="Output file for simulation data", nargs="?")
     argparser.add_argument("--frames", "-f", type=int, default=1000, help="Number of frames to simulate")
     argparser.add_argument("--no-write", action="store_false", dest="writeFrame", help="Don't write frames during simulation, write at the end (faster but more memory usage)")
+    argparser.add_argument("--config", "-c", type=str, default="simcfg.json", help="Configuration file for simulation parameters", nargs="?")
     args = argparser.parse_args()
 
     output_file = args.output
@@ -310,11 +405,20 @@ if __name__ == "__main__":
         output_file = sys.stdout.buffer
     else:
         output_file = open(output_file, "wb")
+    
+    if args.frames < 0 and output_file != sys.stdout.buffer:
+        print("Warning: negative frame count means indefinite simulation, but output is not stdout, this may result in a very large file", file=sys.stderr)
 
     frames = args.frames
     sim = Simulation()
     sim.initHeadless(output_file,frames)
+
+    loadConfig(sim,args.config)
+
     sim.writeFrame = args.writeFrame
     sim.main()
 
-    output_file.close()
+    if args.output != "-":
+        output_file.close()
+    
+    sys.stderr.close()

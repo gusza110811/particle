@@ -121,13 +121,13 @@ class Renderer:
         
         pressed = self.key.get_pressed()
         dir = Vector2d()
-        if pressed[pygame.K_w]:
+        if pressed[pygame.K_w] or pressed[pygame.K_UP]:
             dir.translate((0,-1))
-        if pressed[pygame.K_s]:
+        if pressed[pygame.K_s] or pressed[pygame.K_DOWN]:
             dir.translate((0,1))
-        if pressed[pygame.K_a]:
+        if pressed[pygame.K_a] or pressed[pygame.K_LEFT]:
             dir.translate((-1,0))
-        if pressed[pygame.K_d]:
+        if pressed[pygame.K_d] or pressed[pygame.K_RIGHT]:
             dir.translate((1,0))
         
         self.cam.translate(dir.scale(300*(2**-self.camZoom)*dt))
