@@ -30,6 +30,7 @@ class Simulation:
         self.output:io.FileIO = None
 
         self.debug = True
+        self.writeFrame = True
 
         self.borderType = 1 # 0 for circle, 1 for square
 
@@ -48,6 +49,8 @@ class Simulation:
         self.output.write(self.verticalLim.to_bytes(4,'little'))
         self.output.write(bytearray(struct.pack("<f",self.radius)))
         self.output.write(self.borderType.to_bytes(1,'little'))
+
+        writeFrame = self.writeFrame
         timestart = time.time()
         while self.running:
             timeb = time.perf_counter()
@@ -57,25 +60,26 @@ class Simulation:
                 self.particles.append(buffer.pop())
                 self.particles.append(buffer.pop())
             self.physic()
-            self.saveFrame()
+            self.saveFrame(writeFrame)
             if self.frame >= self.targetFrames:
                 self.running = False
             timetaken = time.perf_counter() - timeb
             print(f"frame {self.frame}/{self.targetFrames} {timetaken*1000:4.0f}ms  ",end="\r",file=sys.stderr)
         print(f"\ntook {time.time()-timestart:.4f} seconds",file=sys.stderr)
-        writing = True
-        def blink():
-            while writing:
-                print("\b.",end="",flush=True)
-                time.sleep(0.1)
-                print("\b ",end="",flush=True)
-                time.sleep(0.1)
-        print("writing ",end="")
-        blinkthread = threading.Thread(target=blink,daemon=True)
-        blinkthread.start()
-        self.output.write(self.buffer)
-        writing = False
-        print("\ndone")
+        if not writeFrame:
+            writing = True
+            def blink():
+                while writing:
+                    print("\b.",end="",flush=True)
+                    time.sleep(0.1)
+                    print("\b ",end="",flush=True)
+                    time.sleep(0.1)
+            print("writing ",end="")
+            blinkthread = threading.Thread(target=blink,daemon=True)
+            blinkthread.start()
+            self.output.write(self.buffer)
+            writing = False
+            print("\ndone")
     
     def initHeadless(self,output,targetFrames):
         self.buffer = bytearray()
@@ -83,16 +87,21 @@ class Simulation:
         self.frame = 0
         self.targetFrames = targetFrames
     
-    def saveFrame(self):
+    def saveFrame(self,write:bool):
         particles = self.particles
         # output format: [frame id u32] [particle count u32]
         # [particle x f32] [particle y f32]
-        buffer = self.buffer
+        if write:
+            buffer = bytearray()
+        else:
+            buffer = self.buffer
         buffer.extend(self.frame.to_bytes(4,'little'))
         buffer.extend(len(particles).to_bytes(4,'little'))
         for part in particles:
             buffer.extend(bytearray(struct.pack("f",part.pos.x)))
             buffer.extend(bytearray(struct.pack("f",part.pos.y)))
+        if write:
+            self.output.write(buffer)
         self.frame += 1
     
     def physic(self):
@@ -293,6 +302,7 @@ if __name__ == "__main__":
     argparser = argparse.ArgumentParser(description="Run particle simulation")
     argparser.add_argument("--output", "-o", type=str, default="output.sim", help="Output file for simulation data", nargs="?")
     argparser.add_argument("--frames", "-f", type=int, default=1000, help="Number of frames to simulate")
+    argparser.add_argument("--no-write", action="store_false", dest="writeFrame", help="Don't write frames during simulation, write at the end (faster but more memory usage)")
     args = argparser.parse_args()
 
     output_file = args.output
@@ -300,10 +310,11 @@ if __name__ == "__main__":
         output_file = sys.stdout.buffer
     else:
         output_file = open(output_file, "wb")
-    
+
     frames = args.frames
     sim = Simulation()
     sim.initHeadless(output_file,frames)
+    sim.writeFrame = args.writeFrame
     sim.main()
 
     output_file.close()

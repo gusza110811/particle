@@ -4,6 +4,7 @@ import math
 import struct
 import sys
 import io
+import argparse
 
 class Renderer:
     def __init__(self,source:io.BytesIO):
@@ -143,9 +144,13 @@ def testpiped():
     renderer.main()
 
 if __name__ == "__main__":
-    DOPIPEDTEST = False
+    argparser = argparse.ArgumentParser(description="Render particle simulation")
+    argparser.add_argument("--file", "-f", type=str, default="output.sim", help="Input file for simulation data", nargs="?")
+    args = argparser.parse_args()
 
-    if DOPIPEDTEST:
-        testpiped()
+    if args.file == "-":
+        source = sys.stdin.buffer
     else:
-        test()
+        source = open(args.file,"rb")
+    renderer = Renderer(source)
+    renderer.main()
