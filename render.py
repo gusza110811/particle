@@ -52,8 +52,8 @@ class Renderer:
         # camZoom is the power of 2 to scale the world by when rendering, so camZoom of 1 means 2x zoom, camZoom of -1 means 0.5x zoom
         self.camZoom = round(math.log2((self.screenVerLim/2)/self.verticalLim),1)
         #self.camZoom = 0
-        if version > 2:
-            print("Incompatible version, expected <2, got",version,file=sys.stderr)
+        if version != 2:
+            print("Incompatible version, expected 2, got",version,file=sys.stderr)
             return
         self.frame = 0
 
@@ -71,7 +71,10 @@ class Renderer:
         dt = self.clock.get_time()/1000
         self.event(dt)
         if self.rendering and not self.paused:
-            self.particlespos, self.particlesvel = self.read()
+            particlespos, particlesvel = self.read()
+            if not self.rendering:return
+            self.particlespos = particlespos
+            self.particlesvel = particlesvel
 
         self.render(self.particlespos,self.particlesvel)
         self.clock.tick(30)
@@ -82,10 +85,10 @@ class Renderer:
         frameidb = source.read(4)
         frameId = int.from_bytes(frameidb,byteorder='little')
         if frameidb == b"":
-            rendering = False
+            self.rendering = False
         if frameId != self.frame:
             print(f"File Corrupted: expected frame ID {self.frame}, got {frameId} (at position {source.tell():X})",file=sys.stderr)
-            return
+            return None, None
         partCount = int.from_bytes(source.read(4),"little")
         for idx in range(partCount):
             x = struct.unpack("<f",source.read(4))[0]
