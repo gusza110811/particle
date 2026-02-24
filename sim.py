@@ -356,11 +356,11 @@ def loadConfig(sim:Simulation,filename:str="simcfg.json"):
     else:
         print("No particle radius specified, using default 4", file=sys.stderr)
     
-    dampening = data.get("dampening", None)
-    if dampening is not None:
-        sim.velConserve = 1 - dampening
+    damping = data.get("damping", None)
+    if damping is not None:
+        sim.velConserve = 1 - damping
     else:
-        print("No dampening specified, using default 0 (no dampening)", file=sys.stderr)
+        print("No damping specified, using default 0 (no dampening)", file=sys.stderr)
     
     elasticity = data.get("elasticity", None)
     if elasticity is not None:

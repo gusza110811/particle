@@ -2,7 +2,7 @@
     "gravity":[0,0.2],
     "simSize": [512,512],
     "radius":4,
-    "dampening":0,
+    "damping":0,
     "elasticity":0.95,
     "substep":8,
     "velLimit":32,
