@@ -36,7 +36,7 @@ class Simulation:
         self.particles:list[Particle.Particle] = []
         self.cell_size = self.radius*2
         self.substep = 8
-        self.velLimit = 32
+        self.velLimit = 32.0
 
         self.output:io.FileIO = None
 
@@ -54,11 +54,12 @@ class Simulation:
     def main(self):
         # write header for simulation file output
         self.output.write(b"\xFFPARTSIM")
-        self.output.write((1).to_bytes(1,'little'))
+        self.output.write((2).to_bytes(1,'little'))
         self.output.write(self.horizontalLim.to_bytes(4,'little'))
         self.output.write(self.verticalLim.to_bytes(4,'little'))
         self.output.write(bytearray(struct.pack("<f",self.radius)))
         self.output.write(self.borderType.to_bytes(1,'little'))
+        self.output.write(bytearray(struct.pack("<f",self.velLimit)))
 
         writeFrame = self.writeFrame
         timestart = time.time()
@@ -106,6 +107,8 @@ class Simulation:
         for part in particles:
             buffer.extend(bytearray(struct.pack("f",part.pos.x)))
             buffer.extend(bytearray(struct.pack("f",part.pos.y)))
+            buffer.extend(bytearray(struct.pack("f",part.vel.x)))
+            buffer.extend(bytearray(struct.pack("f",part.vel.y)))
         if write:
             try:
                 self.output.write(buffer)

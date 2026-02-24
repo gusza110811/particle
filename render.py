@@ -5,6 +5,7 @@ import struct
 import sys
 import io
 import argparse
+import colorsys
 
 class Renderer:
     def __init__(self,source:io.BytesIO):
@@ -47,58 +48,80 @@ class Renderer:
         self.verticalLim = int.from_bytes(source.read(4),byteorder="little")
         self.radius = struct.unpack("<f",source.read(4))[0]
         self.borderType = int.from_bytes(source.read(1),byteorder="little")
+        self.velLimit = struct.unpack("<f",source.read(4))[0]
         # camZoom is the power of 2 to scale the world by when rendering, so camZoom of 1 means 2x zoom, camZoom of -1 means 0.5x zoom
         self.camZoom = round(math.log2((self.screenVerLim/2)/self.verticalLim),1)
         #self.camZoom = 0
-        if version >= 2:
-            print("Incompatible version, expected 1, got",version,file=sys.stderr)
+        if version > 2:
+            print("Incompatible version, expected <2, got",version,file=sys.stderr)
             return
-        frame = 0
+        self.frame = 0
 
-        clock = pygame.time.Clock()
+        self.clock = pygame.time.Clock()
+        self.particlespos = []
+        self.particlesvel = []
 
-        rendering = True
-
-        particles = []
+        self.rendering = True
         
         while self.running:
             self.screen.fill((0,0,0))
-            dt = clock.get_time()/1000
-            self.event(dt)
-            if rendering and not self.paused:
-                particlesbuf = []
-                frameidb = source.read(4)
-                frameId = int.from_bytes(frameidb,byteorder='little')
-                if frameidb == b"":
-                    rendering = False
-                    continue
-                if frameId != frame:
-                    print(f"File Corrupted: expected frame ID {frame}, got {frameId} (at position {source.tell():X})",file=sys.stderr)
-                    return
-                partCount = int.from_bytes(source.read(4),"little")
-                for idx in range(partCount):
-                    x = struct.unpack("<f",source.read(4))[0]
-                    y = struct.unpack("<f",source.read(4))[0]
-                    position = Vector2d(x,y)
-                    particlesbuf.append(position)
-                frame += 1
-                particles = particlesbuf
-            self.infoOverlay(frame, clock.get_fps(), self.paused, not rendering)
-            self.render(particles)
-            clock.tick(30)
+            self.doFrame()
+    
+    def doFrame(self):
+        dt = self.clock.get_time()/1000
+        self.event(dt)
+        if self.rendering and not self.paused:
+            self.particlespos, self.particlesvel = self.read()
 
-    def render(self,particles:list[Vector2d]):
+        self.render(self.particlespos,self.particlesvel)
+        self.clock.tick(30)
+
+    def read(self):
+        particlesposbuf = []
+        particlevelbuf = []
+        frameidb = source.read(4)
+        frameId = int.from_bytes(frameidb,byteorder='little')
+        if frameidb == b"":
+            rendering = False
+        if frameId != self.frame:
+            print(f"File Corrupted: expected frame ID {self.frame}, got {frameId} (at position {source.tell():X})",file=sys.stderr)
+            return
+        partCount = int.from_bytes(source.read(4),"little")
+        for idx in range(partCount):
+            x = struct.unpack("<f",source.read(4))[0]
+            y = struct.unpack("<f",source.read(4))[0]
+            vx = struct.unpack("<f",source.read(4))[0]
+            vy = struct.unpack("<f",source.read(4))[0]
+            position = Vector2d(x,y)
+            velocity = Vector2d(vx,vy)
+            particlesposbuf.append(position)
+            particlevelbuf.append(velocity)
+        self.frame += 1
+        return particlesposbuf, particlevelbuf
+
+    def render(self,positions:list[Vector2d],velocities:list[Vector2d]):
         horLim = self.screenHorLim
         verLim = self.screenVerLim
-        r = math.ceil(max(self.radius * 2**self.camZoom,1))
+        r = math.ceil(max(self.radius * 2**self.camZoom,1)*1.1+1)
         d = r*2
         centerPos = self.centerPos
-        for particle in particles:
+        velLim = self.velLimit
+        for idx, particle in enumerate(positions):
             pos = (particle - self.cam).scale(2**self.camZoom).translate(centerPos)
+            vel = velocities[idx]
+            speednor = min(vel.magnitude()/velLim,0.9)
+
+            color = [ int(c*255) for c in
+                colorsys.hsv_to_rgb(
+                    speednor,1,1
+                )
+            ]
+
             # culling
             if (abs(pos.x) > horLim+d) or (abs(pos.y) > verLim+d):
                 continue
-            self.draw.circle(self.screen, (255,255,255), (pos.x,pos.y), r)
+            self.draw.circle(self.screen, color, (pos.x,pos.y), r)
+        self.infoOverlay(self.frame, self.clock.get_fps(), self.paused, not self.rendering)
         pygame.display.flip()
     
     def infoOverlay(self, frames, fps, paused, done):
@@ -115,7 +138,8 @@ class Renderer:
                     self.paused = not self.paused
                 elif event.key == pygame.K_f:
                     self.paused = True
-                    self.physic()
+                    self.particlespos, self.particlesvel = self.read()
+                    self.render(self.particlespos,self.particlesvel)
             elif event.type == pygame.MOUSEWHEEL:
                 self.camZoom += event.y/10
         

@@ -3,23 +3,23 @@
     "simSize": [512,512],
     "radius":4,
     "damping":0,
-    "elasticity":0.95,
+    "elasticity":0.5,
     "substep":8,
     "velLimit":32,
 
     "emitters": [
         {
-            "pos":[-1,512],
+            "pos":[-1,256],
             "area":[2,1],
-            "startVel":[-1,-20],
-            "timeToLive":100,
+            "startVel":[-1,-10],
+            "timeToLive":400,
             "timeToStart":0
         },
         {
-            "pos":[1,512],
+            "pos":[1,256],
             "area":[2,1],
-            "startVel":[1,-20],
-            "timeToLive":100,
+            "startVel":[1,-10],
+            "timeToLive":400,
             "timeToStart":0
         }
     ]
